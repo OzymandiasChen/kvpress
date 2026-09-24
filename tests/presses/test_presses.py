@@ -10,6 +10,7 @@ from transformers import DynamicCache
 from kvpress import (
     AdaKVPress,
     ChunkKVPress,
+    ChunkKVSummaryPress,
     ChunkPress,
     ComposedPress,
     CriticalAdaKVPress,
@@ -60,6 +61,40 @@ def test_chunkkv_press(unit_test_model):  # noqa: F811
             cache = DynamicCache()
             unit_test_model(input_ids, past_key_values=cache).past_key_values
             assert cache.get_seq_length() == 128
+
+
+class _StubTokenizer:
+    def encode(self, text, add_special_tokens=False):
+        return [11, 12, 13]
+
+
+def test_chunkkv_summary_press(unit_test_model):  # noqa: F811
+    input_ids = torch.randint(0, 1024, (1, 280), device=unit_test_model.device)
+
+    def run(press):
+        cache = DynamicCache()
+        with press(unit_test_model), torch.no_grad():
+            unit_test_model.model(input_ids=input_ids, past_key_values=cache)
+        return cache
+
+    # summary_length=0 is exactly ChunkKV
+    reference = run(ChunkKVPress(press=SnapKVPress(compression_ratio=0.5), chunk_length=16))
+    disabled = run(ChunkKVSummaryPress(press=SnapKVPress(compression_ratio=0.5), chunk_length=16, summary_length=0))
+    for ref_layer, layer in zip(reference.layers, disabled.layers):
+        assert torch.equal(ref_layer.keys, layer.keys) and torch.equal(ref_layer.values, layer.values)
+
+    # M=16, P=4, N=8: 280 tokens contain 4 groups of 64 tokens -> ChunkKV tokens + 4 * 8 summary tokens
+    press = ChunkKVSummaryPress(
+        press=SnapKVPress(compression_ratio=0.5),
+        chunk_length=16,
+        chunks_per_summary=4,
+        summary_length=8,
+        tokenizer=_StubTokenizer(),
+    )
+    cache = run(press)
+    assert len(press.summary_token_ids) == 4 and all(len(ids) == 8 for ids in press.summary_token_ids)
+    for layer_idx in range(len(cache)):
+        assert cache.get_seq_length(layer_idx) == reference.get_seq_length(layer_idx) + 4 * 8
 
 
 @pytest.mark.parametrize("press_dict", default_presses)

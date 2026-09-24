@@ -63,6 +63,34 @@ class ChunkKVPress(BasePress):
 
         assert attentions is None, "ChunkPress does not support attentions."
 
+        # If we have no complete chunks, delegate to the underlying scorer press
+        if keys.shape[2] // self.chunk_length == 0:
+            return self.press.compress(module, hidden_states, keys, values, attentions, kwargs)
+
+        indices = self.select_indices(module, hidden_states, keys, values, attentions, kwargs)
+        indices = indices.view(1, 1, -1, 1).expand(keys.shape[0], keys.shape[1], -1, module.head_dim)
+
+        # 5. Use gather to collect selected keys and values
+        keys = keys.gather(2, indices).contiguous()
+        values = values.gather(2, indices).contiguous()
+
+        return keys, values
+
+    def select_indices(
+        self,
+        module: nn.Module,
+        hidden_states: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attentions: torch.Tensor,
+        kwargs: dict,
+    ) -> torch.Tensor:
+        """
+        Return the sorted 1D tensor of token positions kept by chunk-wise selection.
+        Requires at least one complete chunk (kv_len >= chunk_length).
+        """
+        assert attentions is None, "ChunkPress does not support attentions."
+
         kv_len = keys.shape[2]
 
         # 1. Calculate global scores first
@@ -78,10 +106,6 @@ class ChunkKVPress(BasePress):
         # 2. Calculate actual number of complete chunks and remaining tokens
         num_complete_chunks = kv_len // self.chunk_length
         remaining_tokens = kv_len % self.chunk_length
-
-        # If we have no complete chunks, delegate to the underlying scorer press
-        if num_complete_chunks == 0:
-            return self.press.compress(module, hidden_states, keys, values, attentions, kwargs)
 
         # Reshape complete chunks for score calculation
         if num_complete_chunks > 0:
@@ -115,11 +139,4 @@ class ChunkKVPress(BasePress):
                 chunk_indices = torch.arange(num_complete_chunks * self.chunk_length, kv_len, device=keys.device)
             indices.append(chunk_indices)
 
-        indices = torch.cat(indices).sort()[0]
-        indices = indices.view(1, 1, -1, 1).expand(keys.shape[0], keys.shape[1], -1, module.head_dim)
-
-        # 5. Use gather to collect selected keys and values
-        keys = keys.gather(2, indices).contiguous()
-        values = values.gather(2, indices).contiguous()
-
-        return keys, values
+        return torch.cat(indices).sort()[0]

@@ -11,6 +11,7 @@ from kvpress.presses.cam_press import CAMPress
 from kvpress.presses.cap_press import CapPress
 from kvpress.presses.chunk_press import ChunkPress
 from kvpress.presses.chunkkv_press import ChunkKVPress
+from kvpress.presses.chunkkv_summary_press import ChunkKVSummaryPress
 from kvpress.presses.compactor_press import CompactorPress
 from kvpress.presses.composed_press import ComposedPress
 from kvpress.presses.compression_ratio_decoding_press import CompressionRatioDecodingPress
@@ -77,6 +78,7 @@ __all__ = [
     "ChunkPress",
     "DuoAttentionPress",
     "ChunkKVPress",
+    "ChunkKVSummaryPress",
     "QFilterPress",
     "PyramidKVPress",
     "FinchPress",

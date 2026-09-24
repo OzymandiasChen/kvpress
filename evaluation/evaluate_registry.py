@@ -17,6 +17,7 @@ from kvpress import (
     BlockPress,
     CAMPress,
     ChunkKVPress,
+    ChunkKVSummaryPress,
     CompactorPress,
     ComposedPress,
     CriticalAdaKVPress,
@@ -82,6 +83,9 @@ PRESS_REGISTRY = {
     "adakv_snapkv": AdaKVPress(SnapKVPress()),
     "block_keydiff": BlockPress(press=KeyDiffPress(), block_size=128),
     "chunkkv": ChunkKVPress(press=SnapKVPress(), chunk_length=20),
+    "chunkkv_summary": ChunkKVSummaryPress(
+        press=SnapKVPress(), chunk_length=16, chunks_per_summary=4, summary_length=8
+    ),
     "critical_adakv_expected_attention": CriticalAdaKVPress(ExpectedAttentionPress(use_vnorm=False)),
     "critical_adakv_snapkv": CriticalAdaKVPress(SnapKVPress()),
     "critical_expected_attention": CriticalKVPress(ExpectedAttentionPress(use_vnorm=False)),
